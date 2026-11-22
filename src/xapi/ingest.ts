@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MIT
 import type { IngestRecord, Storage } from "../storage/types";
-import { activityName, extractColumns, extractPage, learnerIdentity } from "./extract";
+import { activityName, extractColumns, extractPage, learnerIdentity, privacyRoot } from "./extract";
 import { parseStatements, type ValidStatement } from "./validate";
 
 const OPAQUE_TOKEN = /^[A-Za-z0-9_-]{16,128}$/;
@@ -57,13 +57,6 @@ function strictestMode(a: IdentityMode, b: string | undefined): IdentityMode {
   if (a === "anonymous" || other === "anonymous") return "anonymous";
   if (a === "token" || other === "token") return "token";
   return "named";
-}
-
-function privacyRoot(activityIri: string | null, scope: string | null | undefined): string | null {
-  if (!activityIri) return null;
-  if (scope && (activityIri === scope || activityIri.startsWith(`${scope}/`))) return scope;
-  const child = /\/(?:steps|q|questions)\//.exec(activityIri);
-  return child ? activityIri.slice(0, child.index) : activityIri;
 }
 
 function stripClientStored(statement: ValidStatement, id: string): Record<string, unknown> {
@@ -218,7 +211,7 @@ export async function ingestStatements(
   const prepared = parsed.statements.map((statement) => {
     const id = statement.id ?? crypto.randomUUID();
     ids.push(id);
-    const columns = extractColumns(statement, id, stored);
+    const columns = extractColumns(statement, id, stored, options.activityScope);
     return {
       statement,
       id,
@@ -306,7 +299,7 @@ export async function ingestStatements(
         identity: policy.identity,
         displayName: policy.displayName,
         learnerId: crypto.randomUUID(),
-        activityName: columns.activityIri ? activityName(statement) : null,
+        activityName: columns.activityIri ? activityName(statement, policyIri) : null,
         pageUrl: mode === "named" && columns.activityIri === policyIri ? pageUrl : null,
         identityMode: mode,
         policyIri,

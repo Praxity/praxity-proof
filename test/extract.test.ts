@@ -92,6 +92,16 @@ describe("activityName", () => {
         },
       }),
     ).toBe("Quiz fractions"));
+  it.each([
+    [{ "en-US": "Interaction q1" }, { fr: "Quelle option?" }, "Quelle option?"],
+    [{ "en-US": "Interaction q1" }, undefined, "Interaction q1"],
+    [{ en: "A custom question label" }, { en: "Description" }, "A custom question label"],
+  ] as const)("uses Studio question descriptions only for generic labels", (name, description, expected) => {
+    expect(activityName({
+      ...base,
+      object: { id: "https://example.org/course/interaction/q1", definition: { name, description } },
+    })).toBe(expected);
+  });
   it("returns null when object has no definition", () =>
     expect(activityName({ ...base, object: { id: "https://example.org/a" } })).toBeNull());
 });

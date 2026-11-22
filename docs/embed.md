@@ -67,7 +67,7 @@ In plain language, so you can decide if it fits before wiring anything up.
 | Mode | Learner experience | Dashboard shows |
 |------|--------------------|-----------------|
 | `anonymous` (default) | nothing | a pseudonymous browser row; the server discards actor names, nested identity metadata, attachments, unsupported extensions, and page location, then irreversibly pseudonymizes the actor identifier |
-| `ask` | a name prompt on the first tracked event | the entered name for the current browser session |
+| `ask` | a name prompt on the first tracked event | the entered name for the current browser session, when server policy is `named` (see below) |
 | `token` | nothing; identity rides `?plearner=TOKEN` links | one row per opaque token; Proof removes the parameter from the visible URL after reading it |
 
 Token values must be 16-128 characters using letters, digits, `_`, or `-`.
@@ -79,6 +79,34 @@ The browser identifier is namespaced to the Proof instance and activity and
 expires after one year. It is created lazily on the first enabled event, not
 when the script loads. `proof.resetIdentity()` clears it. Shared-device users
 should be given a visible way to reset it between learners.
+
+### Enable named tracking
+
+`data-identity="ask"` prompts for a name in the browser. To retain that name,
+Proof also needs an ingest key with server policy `identityMode: "named"`.
+The README quickstart creates an anonymous key; changing the script attribute
+alone does not change that policy.
+
+1. Choose a new activity IRI that has not been configured with an anonymous or
+   token policy, for example `https://YOUR-INSTANCE/a/fractions-named`.
+2. Mint a new ingest key with that scope and named policy:
+
+   ```sh
+   curl -X POST https://YOUR-INSTANCE/admin/keys \
+     -u admin:YOUR_ADMIN_PASSWORD \
+     -H "Content-Type: application/json" \
+     -d '{"label":"Fractions named","activityScope":"https://YOUR-INSTANCE/a/fractions-named","identityMode":"named","allowedOrigin":"https://YOUR-PAGE-ORIGIN"}'
+   ```
+
+3. Set `data-activity="fractions-named"`, use the returned key ID and secret in
+   `data-key`, and set `data-identity="ask"`. Update the learner notice before
+   collecting names.
+
+Proof applies the strictest policy from the key and the existing activity:
+anonymous overrides token and named; token overrides named. A new named key
+for an activity already configured as anonymous still produces anonymous
+records. Revoking the anonymous key does not remove the activity policy or
+recover discarded names. Use a new activity IRI for future named collection.
 
 ## Notice and consent modes
 
@@ -118,6 +146,62 @@ Limitation: H5P only exposes events to the page hosting it. Per H5P's docs,
 to track what the learner does." `data-h5p` works where the H5P content and the
 page are on the same site, such as WordPress/Drupal plugins, h5p-standalone, or
 Lumi HTML exports. It does not work for h5p.org cross-site iframe embeds.
+
+## Connect a Studio xAPI export
+
+Set Studio's xAPI endpoint to `https://YOUR-INSTANCE/xapi/statements` and use
+Basic authentication with an ingest key's ID and secret. The key's activity
+scope must match Studio's course activity IRI. Choose the server identity
+policy when creating the key, as described above. Studio supplies its own
+actor; the snippet's `data-identity` attribute does not configure Studio.
+
+If the key has an `allowedOrigin`, set it to the LMS origin from which the
+export runs, not the Proof endpoint's origin. For an export hosted separately,
+use the origin serving the course page. Proof rejects requests whose `Origin`
+header does not match the key's allowed origin.
+
+A Proof instance in consent tracking mode rejects Studio statements: Studio
+does not send the required `X-Proof-Consent: granted` header. The standard
+Studio export cannot connect to that mode; an integration that supplies
+consent evidence is required.
+
+Proof accepts both Studio and Proof snippet child activities:
+
+| Producer | Object ID | Verb | Report |
+|----------|-----------|------|--------|
+| Studio | `<activity>/page/<pageId>` | `http://adlnet.gov/expapi/verbs/experienced` | Page visit in the step funnel |
+| Studio | `<activity>/interaction/<id>` | `http://adlnet.gov/expapi/verbs/answered` | Learner answers and question statistics |
+| Proof snippet | `<activity>/steps/<id>` | `http://adlnet.gov/expapi/verbs/progressed` | Step funnel |
+| Proof snippet | `<activity>/q/<id>` | `http://adlnet.gov/expapi/verbs/answered` | Learner answers and question statistics |
+
+Studio answers carry `result.response`, with optional `result.success` and
+`result.score.raw`. Missing success remains unknown in question statistics.
+Course scores and completion come from statements on the course activity,
+not its questions. Child objects do not appear as separate courses in the
+activity list. Studio child IDs are used literally; Proof snippet IDs are
+URI-decoded. Question labels use Studio's `definition.description` when its
+`definition.name` is the generic `Interaction <id>` label.
+
+Studio quiz groups send an additional answered interaction under
+`<activity>/interaction/<groupId>`, with a percentage response such as `80%`.
+Reportable member questions also send their own answers. Proof currently
+includes the group summary as another row in learner answers and question
+statistics. Do not interpret the row count as the number of individual
+questions. Studio's xAPI payload has no explicit group marker, so Proof cannot
+reliably separate summaries from individual questions using these statements.
+
+Studio navigation sends the destination page as its object, with
+`context.extensions["https://praxity.io/xapi/from"]` and
+`context.extensions["https://praxity.io/xapi/trigger"]` describing the source
+page and navigation trigger. The destination counts as the visited step.
+These extensions do not supply a hosting-page URL or a duration. Named mode
+retains them in raw statements; anonymous and token modes keep their existing
+metadata filtering. Repeated visits count once per participant per funnel row.
+
+Previously stored Studio page statements also populate the funnel even if
+their stored step field is empty. No re-ingest or database migration is needed.
+Existing Proof step extensions (`result.extensions` under
+`https://praxity.io/xapi/ext/step`) and snippet paths remain supported.
 
 ## About the embedded key
 

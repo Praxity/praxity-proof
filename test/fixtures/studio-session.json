@@ -1,0 +1,171 @@
+[
+  {
+    "id": "880a77b9-0000-4000-8000-000000000001",
+    "actor": {
+      "name": "Studio Learner",
+      "mbox": "mailto:studio@example.org"
+    },
+    "verb": {
+      "id": "http://adlnet.gov/expapi/verbs/initialized",
+      "display": {
+        "en-US": "initialized"
+      }
+    },
+    "object": {
+      "id": "https://example.org/studio-course",
+      "definition": {
+        "name": {
+          "en-US": "Course"
+        },
+        "type": "http://adlnet.gov/expapi/activities/course"
+      }
+    },
+    "timestamp": "2026-11-22T10:00:00.000Z"
+  },
+  {
+    "id": "880a77b9-0000-4000-8000-000000000002",
+    "actor": {
+      "name": "Studio Learner",
+      "mbox": "mailto:studio@example.org"
+    },
+    "verb": {
+      "id": "http://adlnet.gov/expapi/verbs/experienced",
+      "display": {
+        "en-US": "experienced"
+      }
+    },
+    "object": {
+      "id": "https://example.org/studio-course/page/intro",
+      "definition": {
+        "name": {
+          "en-US": "intro"
+        },
+        "type": "http://adlnet.gov/expapi/activities/module"
+      }
+    },
+    "timestamp": "2026-11-22T10:01:00.000Z"
+  },
+  {
+    "id": "880a77b9-0000-4000-8000-000000000003",
+    "actor": {
+      "name": "Studio Learner",
+      "mbox": "mailto:studio@example.org"
+    },
+    "verb": {
+      "id": "http://adlnet.gov/expapi/verbs/experienced",
+      "display": {
+        "en-US": "experienced"
+      }
+    },
+    "object": {
+      "id": "https://example.org/studio-course/page/practice",
+      "definition": {
+        "name": {
+          "en-US": "practice"
+        },
+        "type": "http://adlnet.gov/expapi/activities/module"
+      }
+    },
+    "timestamp": "2026-11-22T10:02:00.000Z",
+    "context": {
+      "extensions": {
+        "https://praxity.io/xapi/from": "intro",
+        "https://praxity.io/xapi/trigger": "next"
+      }
+    }
+  },
+  {
+    "id": "880a77b9-0000-4000-8000-000000000004",
+    "actor": {
+      "name": "Studio Learner",
+      "mbox": "mailto:studio@example.org"
+    },
+    "verb": {
+      "id": "http://adlnet.gov/expapi/verbs/answered",
+      "display": {
+        "en-US": "answered"
+      }
+    },
+    "object": {
+      "id": "https://example.org/studio-course/interaction/choice-1",
+      "definition": {
+        "name": {
+          "en-US": "Interaction choice-1"
+        },
+        "description": {
+          "en-US": "Interaction choice-1"
+        },
+        "type": "http://adlnet.gov/expapi/activities/cmi.interaction"
+      }
+    },
+    "timestamp": "2026-11-22T10:03:00.000Z",
+    "result": {
+      "response": "B",
+      "success": true,
+      "score": {
+        "raw": 1
+      }
+    }
+  },
+  {
+    "id": "880a77b9-0000-4000-8000-000000000005",
+    "actor": {
+      "name": "Studio Learner",
+      "mbox": "mailto:studio@example.org"
+    },
+    "verb": {
+      "id": "http://adlnet.gov/expapi/verbs/answered",
+      "display": {
+        "en-US": "answered"
+      }
+    },
+    "object": {
+      "id": "https://example.org/studio-course/interaction/reflection",
+      "definition": {
+        "name": {
+          "en-US": "Interaction reflection"
+        },
+        "description": {
+          "en-US": "Interaction reflection"
+        },
+        "type": "http://adlnet.gov/expapi/activities/cmi.interaction"
+      }
+    },
+    "timestamp": "2026-11-22T10:04:00.000Z",
+    "result": {
+      "response": "My response"
+    }
+  },
+  {
+    "id": "880a77b9-0000-4000-8000-000000000006",
+    "actor": {
+      "name": "Studio Learner",
+      "mbox": "mailto:studio@example.org"
+    },
+    "verb": {
+      "id": "http://adlnet.gov/expapi/verbs/completed",
+      "display": {
+        "en-US": "completed"
+      }
+    },
+    "object": {
+      "id": "https://example.org/studio-course",
+      "definition": {
+        "name": {
+          "en-US": "Course"
+        },
+        "type": "http://adlnet.gov/expapi/activities/course"
+      }
+    },
+    "timestamp": "2026-11-22T10:05:00.000Z",
+    "result": {
+      "completion": true,
+      "score": {
+        "raw": 1,
+        "min": 0,
+        "max": 1,
+        "scaled": 1
+      }
+    }
+  }
+]

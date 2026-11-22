@@ -37,25 +37,51 @@ function isActivityObject(
   return (t === undefined || t === "Activity") && typeof (object as { id?: unknown }).id === "string";
 }
 
-export function activityName(stmt: ValidStatement): string | null {
-  if (!isActivityObject(stmt.object)) return null;
-  const names = (stmt.object as { definition?: { name?: Record<string, string> } }).definition?.name;
-  if (!names) return null;
+export function privacyRoot(activityIri: string | null, scope: string | null | undefined): string | null {
+  if (!activityIri) return null;
+  if (scope && (activityIri === scope || activityIri.startsWith(`${scope}/`))) return scope;
+  const child = /\/(?:steps|q|questions|page|interaction)\//.exec(activityIri);
+  return child ? activityIri.slice(0, child.index) : activityIri;
+}
+
+function languageText(values: Record<string, string> | undefined): string | null {
+  if (!values) return null;
   return (
-    names.en ??
-    Object.entries(names).find(([key]) => key.startsWith("en"))?.[1] ??
-    Object.values(names)[0] ??
+    values.en ??
+    Object.entries(values).find(([key]) => key.startsWith("en"))?.[1] ??
+    Object.values(values)[0] ??
     null
   );
+}
+
+export function activityName(stmt: ValidStatement, courseIri?: string | null): string | null {
+  if (!isActivityObject(stmt.object)) return null;
+  const definition = (stmt.object as { definition?: {
+    name?: Record<string, string>;
+    description?: Record<string, string>;
+  } }).definition;
+  const name = languageText(definition?.name);
+  const root = courseIri ?? privacyRoot(stmt.object.id, null);
+  const prefix = `${root}/interaction/`;
+  if (stmt.object.id.startsWith(prefix)) {
+    const id = stmt.object.id.slice(prefix.length);
+    if (!name || name === `Interaction ${id}`) return languageText(definition?.description) || name;
+  }
+  return name;
 }
 
 const STEP_EXT = "https://praxity.io/xapi/ext/step";
 const STEP_IRI_RE = /\/steps\/([^/]+)$/;
 const PAGE_EXT = "https://praxity.io/xapi/ext/page";
 
-export function extractStep(stmt: ValidStatement): string | null {
+export function extractStep(stmt: ValidStatement, courseIri?: string | null): string | null {
   const objectId = (stmt.object as { id?: unknown }).id;
   if (typeof objectId === "string") {
+    if (stmt.verb.id === "http://adlnet.gov/expapi/verbs/experienced") {
+      const root = courseIri ?? privacyRoot(objectId, null);
+      const prefix = `${root}/page/`;
+      if (objectId.startsWith(prefix) && objectId.length > prefix.length) return objectId.slice(prefix.length);
+    }
     const m = STEP_IRI_RE.exec(objectId);
     if (m) {
       try {
@@ -85,6 +111,7 @@ export function extractColumns(
   stmt: ValidStatement,
   id: string,
   stored: string,
+  courseIri?: string | null,
 ): Omit<StatementRow, "learnerId" | "raw"> {
   const score = stmt.result?.score;
   const bool = (v: boolean | undefined): number | null => (v === undefined ? null : v ? 1 : 0);
@@ -103,7 +130,7 @@ export function extractColumns(
     timestamp: stmt.timestamp ? new Date(stmt.timestamp).toISOString() : stored,
     stored,
     registration: stmt.context?.registration ?? null,
-    step: extractStep(stmt),
+    step: extractStep(stmt, courseIri),
     response: typeof responseVal === "string" ? responseVal : null,
   };
 }
