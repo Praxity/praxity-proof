@@ -16,6 +16,17 @@ describe("extractStep", () => {
     expect(extractStep(base({ object: { id: "https://p.test/a/quiz/steps/section%202" } as never })))
       .toBe("section 2");
   });
+  it("anchors Studio page extraction to the course, even when its IRI contains /page/", () => {
+    const course = "https://p.test/page/catalog/course";
+    const visit = (id: string) => base({
+      verb: { id: "http://adlnet.gov/expapi/verbs/experienced" },
+      object: { id },
+    });
+    expect(extractStep(visit(`${course}/page/intro`), course)).toBe("intro");
+    expect(extractStep(visit(course), course)).toBeNull();
+    expect(extractStep(visit(`${course}/other/page/unrelated`), course)).toBeNull();
+    expect(extractStep(visit(`${course}-other/page/unrelated`), course)).toBeNull();
+  });
   it("reads the step from the result extension", () => {
     expect(
       extractStep(

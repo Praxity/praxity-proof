@@ -155,6 +155,16 @@ scope must match Studio's course activity IRI. Choose the server identity
 policy when creating the key, as described above. Studio supplies its own
 actor; the snippet's `data-identity` attribute does not configure Studio.
 
+If the key has an `allowedOrigin`, set it to the LMS origin from which the
+export runs, not the Proof endpoint's origin. For an export hosted separately,
+use the origin serving the course page. Proof rejects requests whose `Origin`
+header does not match the key's allowed origin.
+
+A Proof instance in consent tracking mode rejects Studio statements: Studio
+does not send the required `X-Proof-Consent: granted` header. The standard
+Studio export cannot connect to that mode; an integration that supplies
+consent evidence is required.
+
 Proof accepts both Studio and Proof snippet child activities:
 
 | Producer | Object ID | Verb | Report |
@@ -169,7 +179,16 @@ Studio answers carry `result.response`, with optional `result.success` and
 Course scores and completion come from statements on the course activity,
 not its questions. Child objects do not appear as separate courses in the
 activity list. Studio child IDs are used literally; Proof snippet IDs are
-URI-decoded.
+URI-decoded. Question labels use Studio's `definition.description` when its
+`definition.name` is the generic `Interaction <id>` label.
+
+Studio quiz groups send an additional answered interaction under
+`<activity>/interaction/<groupId>`, with a percentage response such as `80%`.
+Reportable member questions also send their own answers. Proof currently
+includes the group summary as another row in learner answers and question
+statistics. Do not interpret the row count as the number of individual
+questions. Studio's xAPI payload has no explicit group marker, so Proof cannot
+reliably separate summaries from individual questions using these statements.
 
 Studio navigation sends the destination page as its object, with
 `context.extensions["https://praxity.io/xapi/from"]` and
