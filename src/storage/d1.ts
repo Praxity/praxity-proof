@@ -24,7 +24,13 @@ export class D1Storage implements Storage {
   constructor(private db: D1Database) {}
 
   private static readonly CHILD_FILTER =
-    "iri NOT LIKE '%/q/%' AND iri NOT LIKE '%/questions/%' AND iri NOT LIKE '%/steps/%'";
+    "iri NOT LIKE '%/q/%' AND iri NOT LIKE '%/questions/%' AND iri NOT LIKE '%/steps/%' AND iri NOT LIKE '%/page/%' AND iri NOT LIKE '%/interaction/%'";
+
+  private static readonly REPORTED_STEP = `COALESCE(step, CASE
+    WHEN verb = 'http://adlnet.gov/expapi/verbs/experienced'
+      AND substr(activity_iri, 1, length(?1) + 6) = ?1 || '/page/'
+      AND length(activity_iri) > length(?1) + 6
+    THEN substr(activity_iri, length(?1) + 7) END)`;
 
   async createKey(
     id: string,
@@ -529,7 +535,7 @@ export class D1Storage implements Storage {
            SELECT DISTINCT learner_id FROM statements
            WHERE learner_id IS NOT NULL
              AND (activity_iri = ?1 OR substr(activity_iri, 1, ?2) = ?3)
-             AND (step IS NOT NULL OR (activity_iri = ?1 AND completion = 1))
+             AND (${D1Storage.REPORTED_STEP} IS NOT NULL OR (activity_iri = ?1 AND completion = 1))
          )
          SELECT COUNT(*) AS drop_off
          FROM participants p LEFT JOIN progressed x ON x.learner_id = p.learner_id
@@ -558,9 +564,12 @@ export class D1Storage implements Storage {
     const prefix = childPrefix(iri);
     const { results } = await this.db
       .prepare(
-        `WITH step_visits AS (
-           SELECT learner_id, step, MIN(julianday(timestamp)) AS reached_at
+        `WITH reported AS (
+           SELECT learner_id, activity_iri, timestamp, ${D1Storage.REPORTED_STEP} AS step
            FROM statements
+         ), step_visits AS (
+           SELECT learner_id, step, MIN(julianday(timestamp)) AS reached_at
+           FROM reported
            WHERE (activity_iri = ?1 OR substr(activity_iri, 1, ?2) = ?3)
              AND step IS NOT NULL AND learner_id IS NOT NULL
            GROUP BY learner_id, step
@@ -611,16 +620,18 @@ export class D1Storage implements Storage {
 
   async stepLabels(iri: string): Promise<Record<string, string>> {
     const prefix = `${iri}/steps/`;
+    const pagePrefix = `${iri}/page/`;
     const { results } = await this.db
-      .prepare("SELECT iri, name FROM activities WHERE name IS NOT NULL AND substr(iri, 1, ?1) = ?2")
-      .bind(prefix.length, prefix)
+      .prepare("SELECT iri, name FROM activities WHERE name IS NOT NULL AND (substr(iri, 1, ?1) = ?2 OR substr(iri, 1, ?3) = ?4)")
+      .bind(prefix.length, prefix, pagePrefix.length, pagePrefix)
       .all<{ iri: string; name: string }>();
     const labels: Record<string, string> = {};
     for (const r of results) {
-      const raw = r.iri.slice(prefix.length);
+      const isPage = r.iri.startsWith(pagePrefix);
+      const raw = r.iri.slice(isPage ? pagePrefix.length : prefix.length);
       let key = raw;
       try {
-        key = decodeURIComponent(raw);
+        key = isPage ? raw : decodeURIComponent(raw);
       } catch {
         key = raw;
       }
@@ -643,6 +654,7 @@ export class D1Storage implements Storage {
   async answers(iri: string, learnerIds?: string[]): Promise<AnswerRow[]> {
     if (learnerIds && learnerIds.length === 0) return [];
     const prefix = `${iri}/q/`;
+    const interactionPrefix = `${iri}/interaction/`;
     const selectedIds = learnerIds?.slice(0, 500) ?? [];
     const placeholders = selectedIds.map(() => "?").join(", ");
     const learnerFilter = selectedIds.length > 0 ? `AND s.learner_id IN (${placeholders})` : "";
@@ -651,11 +663,11 @@ export class D1Storage implements Storage {
         `SELECT s.learner_id, s.activity_iri, s.response, s.success, s.timestamp, a.name AS question_label
          FROM statements s LEFT JOIN activities a ON a.iri = s.activity_iri
          WHERE s.verb = 'http://adlnet.gov/expapi/verbs/answered'
-           AND substr(s.activity_iri, 1, ?1) = ?2
+           AND (substr(s.activity_iri, 1, ?1) = ?2 OR substr(s.activity_iri, 1, ?3) = ?4)
            ${learnerFilter}
          ORDER BY julianday(s.timestamp) ASC, s.stored ASC, s.id ASC LIMIT 10001`,
       )
-      .bind(prefix.length, prefix, ...selectedIds)
+      .bind(prefix.length, prefix, interactionPrefix.length, interactionPrefix, ...selectedIds)
       .all<{
         learner_id: string;
         activity_iri: string;
@@ -665,10 +677,10 @@ export class D1Storage implements Storage {
         question_label: string | null;
       }>();
     return results.map((r) => {
-      const suffix = r.activity_iri.slice(prefix.length);
+      const suffix = r.activity_iri.slice(r.activity_iri.startsWith(prefix) ? prefix.length : interactionPrefix.length);
       let questionId = suffix;
       try {
-        questionId = decodeURIComponent(suffix);
+        questionId = r.activity_iri.startsWith(prefix) ? decodeURIComponent(suffix) : suffix;
       } catch {
         questionId = suffix;
       }
@@ -685,6 +697,7 @@ export class D1Storage implements Storage {
 
   async questionStats(iri: string): Promise<QuestionStat[]> {
     const prefix = `${iri}/q/`;
+    const interactionPrefix = `${iri}/interaction/`;
     const { results } = await this.db
       .prepare(
         `SELECT s.activity_iri, a.name AS question_label,
@@ -694,11 +707,11 @@ export class D1Storage implements Storage {
                 MIN(julianday(s.timestamp)) AS first_answered
          FROM statements s LEFT JOIN activities a ON a.iri = s.activity_iri
          WHERE s.verb = 'http://adlnet.gov/expapi/verbs/answered'
-           AND substr(s.activity_iri, 1, ?1) = ?2
+           AND (substr(s.activity_iri, 1, ?1) = ?2 OR substr(s.activity_iri, 1, ?3) = ?4)
          GROUP BY s.activity_iri, a.name
          ORDER BY first_answered ASC, s.activity_iri ASC`,
       )
-      .bind(prefix.length, prefix)
+      .bind(prefix.length, prefix, interactionPrefix.length, interactionPrefix)
       .all<{
         activity_iri: string;
         question_label: string | null;
@@ -707,9 +720,9 @@ export class D1Storage implements Storage {
         known_correctness: number;
       }>();
     return results.map((row) => {
-      const suffix = row.activity_iri.slice(prefix.length);
+      const suffix = row.activity_iri.slice(row.activity_iri.startsWith(prefix) ? prefix.length : interactionPrefix.length);
       let questionId = suffix;
-      try { questionId = decodeURIComponent(suffix); } catch { questionId = suffix; }
+      try { questionId = row.activity_iri.startsWith(prefix) ? decodeURIComponent(suffix) : suffix; } catch { questionId = suffix; }
       return {
         questionId,
         questionLabel: row.question_label,
@@ -762,13 +775,13 @@ export class D1Storage implements Storage {
     const prefix = childPrefix(iri);
     const { results } = await this.db
       .prepare(
-        `SELECT timestamp, verb, activity_iri, step, response, success, completion,
+        `SELECT timestamp, verb, activity_iri, ${D1Storage.REPORTED_STEP} AS step, response, success, completion,
                 score_raw, score_max, duration_sec
          FROM statements
-         WHERE learner_id = ?1 AND (activity_iri = ?2 OR substr(activity_iri, 1, ?3) = ?4)
+         WHERE learner_id = ?2 AND (activity_iri = ?1 OR substr(activity_iri, 1, ?3) = ?4)
          ORDER BY julianday(timestamp) ASC, stored ASC, id ASC LIMIT ?5`,
       )
-      .bind(learnerId, iri, prefix.length, prefix, Math.max(1, Math.min(1000, Math.floor(limit))))
+      .bind(iri, learnerId, prefix.length, prefix, Math.max(1, Math.min(1000, Math.floor(limit))))
       .all<Record<string, unknown>>();
     return results.map((r) => ({
       timestamp: r.timestamp as string,

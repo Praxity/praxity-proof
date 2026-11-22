@@ -51,11 +51,16 @@ export function activityName(stmt: ValidStatement): string | null {
 
 const STEP_EXT = "https://praxity.io/xapi/ext/step";
 const STEP_IRI_RE = /\/steps\/([^/]+)$/;
+const STUDIO_PAGE_IRI_RE = /\/page\/(.+)$/;
 const PAGE_EXT = "https://praxity.io/xapi/ext/page";
 
 export function extractStep(stmt: ValidStatement): string | null {
   const objectId = (stmt.object as { id?: unknown }).id;
   if (typeof objectId === "string") {
+    if (stmt.verb.id === "http://adlnet.gov/expapi/verbs/experienced") {
+      const page = STUDIO_PAGE_IRI_RE.exec(objectId);
+      if (page) return page[1];
+    }
     const m = STEP_IRI_RE.exec(objectId);
     if (m) {
       try {
